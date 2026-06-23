@@ -182,7 +182,8 @@ fn main() -> Result<(), eframe::Error> {
             .with_transparent(true)
             .with_always_on_top()
             .with_inner_size([180.0, 40.0])
-            .with_taskbar(false),
+            .with_taskbar(false)
+            .with_mouse_passthrough(true),
         ..Default::default()
     };
 
