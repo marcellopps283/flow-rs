@@ -29,13 +29,13 @@ struct MessageContent {
     content: String,
 }
 
-use parakeet_rs::{Parakeet, ExecutionConfig, ExecutionProvider, Transcriber};
+use parakeet_rs::{Nemotron, ExecutionConfig, ExecutionProvider};
 use std::path::Path;
 
 pub struct AiPipeline {
     client: Client,
     api_key: String,
-    parakeet: Parakeet,
+    parakeet: Nemotron,
 }
 
 impl AiPipeline {
@@ -51,7 +51,7 @@ impl AiPipeline {
             println!("WARNING: Nemotron model directory not found at {:?}", model_dir);
         }
         
-        let parakeet = Parakeet::from_pretrained(model_dir.to_str().unwrap(), Some(config))
+        let parakeet = Nemotron::from_pretrained(model_dir.to_str().unwrap(), Some(config))
             .map_err(|e| anyhow::anyhow!("Failed to load Parakeet/Nemotron model: {}", e))?;
 
         Ok(Self {
@@ -62,10 +62,10 @@ impl AiPipeline {
     }
 
     /// Transcribe audio using local NVIDIA Nemotron model via parakeet-rs
-    pub fn transcribe_audio(&mut self, audio_buffer: &[f32], sample_rate: u32, channels: u16) -> Result<String, anyhow::Error> {
-        // Transcribe the raw f32 samples using Parakeet
-        match self.parakeet.transcribe_samples(audio_buffer.to_vec(), sample_rate, channels, None) {
-            Ok(result) => Ok(result.text),
+    pub fn transcribe_audio(&mut self, audio_buffer: &[f32], _sample_rate: u32, _channels: u16) -> Result<String, anyhow::Error> {
+        // Transcribe the raw f32 samples using Nemotron (expects 16kHz mono audio)
+        match self.parakeet.transcribe_audio(audio_buffer) {
+            Ok(text) => Ok(text),
             Err(e) => Err(anyhow::anyhow!("Transcription error: {}", e))
         }
     }
