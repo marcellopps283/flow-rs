@@ -18,7 +18,8 @@ fn main() -> Result<(), eframe::Error> {
     let rt = Arc::new(Runtime::new().expect("Failed to create Tokio runtime"));
 
     let (tx_app_event, mut rx_app_event) = tokio_mpsc::channel(100);
-    automation::init_automation(tx_app_event);
+    // MUST keep _hotkey_manager alive on the main thread, or the hotkey gets unregistered!
+    let _hotkey_manager = automation::init_automation(tx_app_event);
 
     let is_listening_state = Arc::new(AtomicBool::new(false));
     let is_listening_clone = is_listening_state.clone();

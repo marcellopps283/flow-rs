@@ -8,15 +8,15 @@ pub enum AppEvent {
     TranscriptionDone(String),
 }
 
-pub fn init_automation(tx: mpsc::Sender<AppEvent>) {
+pub fn init_automation(tx: mpsc::Sender<AppEvent>) -> GlobalHotKeyManager {
+    let manager = GlobalHotKeyManager::new().expect("Failed to initialize GlobalHotKeyManager");
+    let hotkey = HotKey::new(None, Code::F9);
+    
+    manager.register(hotkey).expect("Failed to register F9 hotkey");
+    
+    let receiver = GlobalHotKeyEvent::receiver().clone();
+    
     std::thread::spawn(move || {
-        let manager = GlobalHotKeyManager::new().expect("Failed to initialize GlobalHotKeyManager");
-        let hotkey = HotKey::new(None, Code::F9);
-        
-        manager.register(hotkey).expect("Failed to register F9 hotkey");
-        
-        let receiver = GlobalHotKeyEvent::receiver();
-        
         loop {
             if let Ok(event) = receiver.recv() {
                 if event.id == hotkey.id() {
@@ -25,6 +25,8 @@ pub fn init_automation(tx: mpsc::Sender<AppEvent>) {
             }
         }
     });
+
+    manager
 }
 
 pub fn type_text(text: &str) {
