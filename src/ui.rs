@@ -10,6 +10,7 @@ pub struct FlowApp {
     stems: Vec<f32>,
     target_stems: Vec<f32>,
     time: f64,
+    has_positioned: bool,
 }
 
 impl FlowApp {
@@ -20,6 +21,7 @@ impl FlowApp {
             stems: vec![0.0; 15],
             target_stems: vec![0.0; 15],
             time: 0.0,
+            has_positioned: false,
         }
     }
 }
@@ -30,6 +32,16 @@ impl eframe::App for FlowApp {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if !self.has_positioned {
+            if let Some(monitor_size) = ctx.input(|i| i.viewport().monitor_size) {
+                let window_width = 180.0;
+                let pos_x = (monitor_size.x - window_width) / 2.0;
+                let pos_y = 10.0;
+                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(pos_x, pos_y)));
+                self.has_positioned = true;
+            }
+        }
+
         let dt = ctx.input(|i| i.stable_dt) as f32;
         self.time += dt as f64;
 
