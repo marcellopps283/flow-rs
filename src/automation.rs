@@ -1,6 +1,5 @@
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, hotkey::{HotKey, Code}};
 use enigo::{Enigo, Keyboard, Settings};
-use tokio::sync::mpsc;
 
 pub enum AppEvent {
     ToggleListening,
@@ -8,11 +7,11 @@ pub enum AppEvent {
     TranscriptionDone(String),
 }
 
-pub fn init_automation(tx: mpsc::Sender<AppEvent>) -> GlobalHotKeyManager {
+pub fn init_automation(tx: tokio::sync::mpsc::Sender<AppEvent>) -> GlobalHotKeyManager {
     let manager = GlobalHotKeyManager::new().expect("Failed to initialize GlobalHotKeyManager");
-    let hotkey = HotKey::new(None, Code::F9);
+    let hotkey = HotKey::new(None, Code::F8);
     
-    manager.register(hotkey).expect("Failed to register F9 hotkey");
+    manager.register(hotkey).expect("Failed to register F8 hotkey");
     
     let receiver = GlobalHotKeyEvent::receiver().clone();
     

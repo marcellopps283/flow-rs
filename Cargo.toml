@@ -3,6 +3,10 @@ name = "flow"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "flow_v2"
+path = "src/main.rs"
+
 [dependencies]
 eframe = "0.27"
 egui = "0.27"
@@ -17,3 +21,8 @@ parakeet-rs = { version = "0.3.6", features = ["cuda"] }
 anyhow = "1.0"
 dotenvy = "0.15"
 ringbuf = "0.3"
+tray-icon = "0.19"
+image = "0.25"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = ["Win32_System_Com"] }
