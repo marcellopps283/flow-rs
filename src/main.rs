@@ -26,7 +26,7 @@ fn main() -> Result<(), eframe::Error> {
 
     let rt_clone = rt.clone();
     std::thread::spawn(move || {
-        let ai_pipeline = ai::AiPipeline::new().expect("Failed to init AI");
+        let mut ai_pipeline = ai::AiPipeline::new().expect("Failed to init AI");
         let mut audio_recorder = audio::AudioRecorder::new();
         
         let mut is_listening = false;
@@ -50,7 +50,9 @@ fn main() -> Result<(), eframe::Error> {
                             audio_rx = None;
                             
                             // Transcription and Polishing Pipeline
-                            if let Ok(raw_text) = ai_pipeline.transcribe_audio(&audio_buffer) {
+                            let sample_rate = audio_recorder.sample_rate;
+                            let channels = audio_recorder.channels;
+                            if let Ok(raw_text) = ai_pipeline.transcribe_audio(&audio_buffer, sample_rate, channels) {
                                 if let Ok(polished_text) = rt_clone.block_on(ai_pipeline.polish_text(&raw_text)) {
                                     automation::type_text(&polished_text);
                                 }

@@ -13,7 +13,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 enigo = "0.2"
 global-hotkey = "0.3"
-ort = "2.0.0-rc.12"
+parakeet-rs = { version = "0.3.6", features = ["cuda"] }
 anyhow = "1.0"
 dotenvy = "0.15"
 ringbuf = "0.3"

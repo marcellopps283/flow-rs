@@ -29,28 +29,45 @@ struct MessageContent {
     content: String,
 }
 
+use parakeet_rs::{Parakeet, ExecutionConfig, ExecutionProvider, Transcriber};
+use std::path::Path;
+
 pub struct AiPipeline {
     client: Client,
     api_key: String,
+    parakeet: Parakeet,
 }
 
 impl AiPipeline {
     pub fn new() -> Result<Self, anyhow::Error> {
-        // Load API key from environment, with a fallback for local testing
         let api_key = std::env::var("GROQ_API_KEY")
             .unwrap_or_else(|_| "your_api_key_here".to_string());
         
+        let config = ExecutionConfig::new()
+            .with_execution_provider(ExecutionProvider::Cuda);
+            
+        let model_dir = Path::new("models/nemotron");
+        if !model_dir.exists() {
+            println!("WARNING: Nemotron model directory not found at {:?}", model_dir);
+        }
+        
+        let parakeet = Parakeet::from_pretrained(model_dir.to_str().unwrap(), Some(config))
+            .map_err(|e| anyhow::anyhow!("Failed to load Parakeet/Nemotron model: {}", e))?;
+
         Ok(Self {
             client: Client::new(),
             api_key,
+            parakeet,
         })
     }
 
-    /// Transcribe audio using local NVIDIA Parakeet/Nemotron model via ONNX Runtime
-    pub fn transcribe_audio(&self, _audio_buffer: &[f32]) -> Result<String, anyhow::Error> {
-        // TODO: Initialize `ort::Session` and run local inference with NVIDIA weights
-        // Simulated response for UI testing
-        Ok("Simulated transcription from the local NVIDIA Nemotron ASR model.".to_string())
+    /// Transcribe audio using local NVIDIA Nemotron model via parakeet-rs
+    pub fn transcribe_audio(&mut self, audio_buffer: &[f32], sample_rate: u32, channels: u16) -> Result<String, anyhow::Error> {
+        // Transcribe the raw f32 samples using Parakeet
+        match self.parakeet.transcribe_samples(audio_buffer.to_vec(), sample_rate, channels, None) {
+            Ok(result) => Ok(result.text),
+            Err(e) => Err(anyhow::anyhow!("Transcription error: {}", e))
+        }
     }
 
     /// Polish text using Groq's Llama 3.3 model

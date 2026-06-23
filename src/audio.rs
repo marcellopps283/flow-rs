@@ -3,11 +3,13 @@ use std::sync::mpsc;
 
 pub struct AudioRecorder {
     stream: Option<cpal::Stream>,
+    pub sample_rate: u32,
+    pub channels: u16,
 }
 
 impl AudioRecorder {
     pub fn new() -> Self {
-        Self { stream: None }
+        Self { stream: None, sample_rate: 16000, channels: 1 }
     }
 
     pub fn start_recording(&mut self, tx: mpsc::Sender<f32>) -> Result<(), anyhow::Error> {
@@ -19,6 +21,8 @@ impl AudioRecorder {
         let config = device.default_input_config()?;
         let sample_format = config.sample_format();
         let config: cpal::StreamConfig = config.into();
+        self.sample_rate = config.sample_rate.0;
+        self.channels = config.channels;
 
         let err_fn = |err| eprintln!("An error occurred on the input audio stream: {}", err);
 
