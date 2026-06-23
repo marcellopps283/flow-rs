@@ -25,7 +25,7 @@ fn main() -> Result<(), eframe::Error> {
 
     let rt_clone = rt.clone();
     std::thread::spawn(move || {
-        let mut ai_pipeline = ai::AiPipeline::new().expect("Failed to init AI");
+        let ai_pipeline = ai::AiPipeline::new().expect("Failed to init AI");
         let mut audio_recorder = audio::AudioRecorder::new();
         
         let mut is_listening = false;

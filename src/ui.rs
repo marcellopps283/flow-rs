@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::runtime::Runtime;
 
 pub struct FlowApp {
+    #[allow(dead_code)]
     rt: Arc<Runtime>,
     is_listening_state: Arc<AtomicBool>,
     stems: Vec<f32>,

@@ -4,6 +4,7 @@ use tokio::sync::mpsc;
 
 pub enum AppEvent {
     ToggleListening,
+    #[allow(dead_code)]
     TranscriptionDone(String),
 }
 
