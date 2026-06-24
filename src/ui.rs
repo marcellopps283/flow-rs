@@ -115,7 +115,7 @@ impl eframe::App for FlowApp {
         // Pill logic
         if !self.has_positioned {
             if let Some(monitor_size) = ctx.input(|i| i.viewport().monitor_size) {
-                let window_width = 240.0;
+                let window_width = 300.0;
                 let pos_x = (monitor_size.x - window_width) / 2.0;
                 let pos_y = 1.0; // Glue to the very top edge, offset by 1px to prevent Windows snapping issues
                 ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(pos_x, pos_y)));
@@ -144,8 +144,8 @@ impl eframe::App for FlowApp {
             self.stems[i] += (self.target_stems[i] - self.stems[i]) * dt * 15.0;
         }
 
-        let target_width = if self.is_listening_state.load(Ordering::Relaxed) { 240.0 } else { 140.0 };
-        let target_height = if self.is_listening_state.load(Ordering::Relaxed) { 50.0 } else { 8.0 };
+        let target_width = if self.is_listening_state.load(Ordering::Relaxed) { 280.0 } else { 180.0 };
+        let target_height = if self.is_listening_state.load(Ordering::Relaxed) { 60.0 } else { 12.0 };
         
         self.ui_width += (target_width - self.ui_width) * (dt * 15.0).min(1.0);
         self.ui_height += (target_height - self.ui_height) * (dt * 15.0).min(1.0);
@@ -212,45 +212,71 @@ impl eframe::App for FlowApp {
                     x += stem_width + spacing;
                 }
             } else {
-                // Organic neon sweep from left to right
+                // Organic neon boundary contour trace
                 let time_f = self.time as f32;
-                let duration = 2.0;
+                let duration = 3.0; // Slower sweep looks more elegant
                 let progress = (time_f % duration) / duration; // 0.0 to 1.0
                 
-                let start_x = rect.left();
-                let end_x = rect.right();
+                let r = 16.0_f32.min(rect.height());
+                let l1 = (rect.height() - r).max(0.0);
+                let l2 = r * std::f32::consts::PI / 2.0;
+                let l3 = (rect.width() - 2.0 * r).max(0.0);
+                let l4 = r * std::f32::consts::PI / 2.0;
+                let l5 = (rect.height() - r).max(0.0);
+                let total_l = l1 + l2 + l3 + l4 + l5;
                 
-                // Allow the head to travel slightly out of bounds so the tail fully leaves the screen
-                let travel_width = rect.width() + 80.0;
-                let head_x = (start_x - 40.0) + progress * travel_width;
+                let get_point = |mut d: f32| -> egui::Pos2 {
+                    if d <= l1 {
+                        return egui::pos2(rect.left(), rect.top() + d);
+                    }
+                    d -= l1;
+                    if d <= l2 {
+                        let frac = d / l2;
+                        let theta = std::f32::consts::PI - frac * (std::f32::consts::PI / 2.0);
+                        let cx = rect.left() + r;
+                        let cy = rect.bottom() - r;
+                        return egui::pos2(cx + r * theta.cos(), cy + r * theta.sin());
+                    }
+                    d -= l2;
+                    if d <= l3 {
+                        return egui::pos2(rect.left() + r + d, rect.bottom());
+                    }
+                    d -= l3;
+                    if d <= l4 {
+                        let frac = d / l4;
+                        let theta = std::f32::consts::PI / 2.0 - frac * (std::f32::consts::PI / 2.0);
+                        let cx = rect.right() - r;
+                        let cy = rect.bottom() - r;
+                        return egui::pos2(cx + r * theta.cos(), cy + r * theta.sin());
+                    }
+                    d -= l4;
+                    return egui::pos2(rect.right(), (rect.bottom() - r - d).max(rect.top()));
+                };
 
-                let trail_length = 60.0;
-                let segments = 30;
-                let seg_width = trail_length / segments as f32;
+                let tail_length = 120.0;
+                let head_d = (total_l + tail_length) * progress;
+                let segments = 45;
+                let seg_len = tail_length / segments as f32;
 
                 for j in 0..segments {
-                    let offset = j as f32 * seg_width;
-                    let seg_x = head_x - offset;
-
-                    // Only draw if inside the rect horizontally
-                    if seg_x >= start_x && seg_x <= end_x {
-                        // Fade out the tail and shrink height
+                    let d2 = head_d - j as f32 * seg_len;
+                    let d1 = head_d - (j as f32 + 1.0) * seg_len;
+                    
+                    if d2 > 0.0 && d1 < total_l {
+                        let p1 = get_point(d1.clamp(0.0, total_l));
+                        let p2 = get_point(d2.clamp(0.0, total_l));
+                        
                         let scale = 1.0 - (j as f32 / segments as f32);
-                        let alpha = scale.powi(2); // Quadratic fade
+                        let alpha = scale.powi(2); // Non-linear fade looks organic
                         let color = egui::Color32::from_rgba_premultiplied(
                             (0.0 * alpha) as u8,
                             (255.0 * alpha) as u8,
-                            (200.0 * alpha) as u8,
+                            (255.0 * alpha) as u8,
                             (255.0 * alpha) as u8,
                         );
-
-                        let seg_height = rect.height() * scale;
-                        let seg_rect = egui::Rect::from_center_size(
-                            egui::pos2(seg_x + seg_width / 2.0, rect.center().y),
-                            egui::vec2(seg_width + 0.5, seg_height.max(1.0)),
-                        );
-
-                        ui.painter().rect_filled(seg_rect, seg_height / 2.0, color);
+                        
+                        let thickness = 3.0 * scale.max(0.1); // Tip is thick, tail is thin
+                        ui.painter().line_segment([p1, p2], egui::Stroke::new(thickness, color));
                     }
                 }
             }
