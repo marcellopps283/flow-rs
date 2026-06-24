@@ -22,8 +22,8 @@ parakeet-rs = { version = "0.3.6", features = ["cuda"] }
 anyhow = "1.0"
 dotenvy = "0.15"
 ringbuf = "0.3"
-tray-icon = "0.19"
 image = "0.25"
+tray-item = "0.10.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.52", features = [
@@ -33,3 +33,6 @@ windows-sys = { version = "0.52", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi"
 ] }
+
+[build-dependencies]
+embed-resource = "3.0.9"

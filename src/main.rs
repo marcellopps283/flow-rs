@@ -160,42 +160,36 @@ fn main() -> Result<(), eframe::Error> {
         options,
         Box::new(|cc| {
             let (tx, rx) = std_mpsc::channel();
-            let ctx = cc.egui_ctx.clone();
-            tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
-                let _ = tx.send(event);
-                ctx.request_repaint();
-            }));
-
-            let (icon_rgba, icon_w, icon_h) = ui::create_tray_icon_rgba();
             
-            // Build the native tray menu
-            use tray_icon::menu::{Menu, MenuItem, PredefinedMenuItem};
-            let tray_menu = Menu::new();
-            let settings_i = MenuItem::new("Settings", true, None);
-            let quit_i = MenuItem::new("Quit", true, None);
-            let _ = tray_menu.append_items(&[
-                &settings_i,
-                &PredefinedMenuItem::separator(),
-                &quit_i,
-            ]);
-
-            let tray_icon = match tray_icon::TrayIconBuilder::new()
-                .with_tooltip("Flow AI")
-                .with_menu(Box::new(tray_menu))
-                .with_icon(tray_icon::Icon::from_rgba(icon_rgba, icon_w, icon_h).expect("Failed to create icon"))
-                .build()
+            #[cfg(target_os = "windows")]
             {
-                Ok(icon) => {
-                    println!("DEBUG: Tray icon created successfully inside run_native!");
-                    Some(icon)
-                }
-                Err(e) => {
-                    println!("WARNING: Tray icon failed inside run_native ({}), continuing without it.", e);
-                    None
-                }
-            };
+                std::thread::spawn(move || {
+                    // Initialize COM on this thread just in case tray-item needs it
+                    unsafe {
+                        let _ = windows_sys::Win32::System::Com::CoInitializeEx(
+                            std::ptr::null(),
+                            windows_sys::Win32::System::Com::COINIT_APARTMENTTHREADED as u32,
+                        );
+                    }
 
-            Box::new(ui::FlowApp::new(cc, rt, is_listening_state, current_amplitude_ui, tray_icon, rx))
+                    let mut tray = tray_item::TrayItem::new("Flow AI", tray_item::IconSource::Resource("app_icon"))
+                        .expect("Failed to create tray icon");
+                    
+                    tray.add_menu_item("Quit", || {
+                        std::process::exit(0);
+                    }).expect("Failed to add Quit menu item");
+
+                    unsafe {
+                        let mut msg: windows_sys::Win32::UI::WindowsAndMessaging::MSG = std::mem::zeroed();
+                        while windows_sys::Win32::UI::WindowsAndMessaging::GetMessageW(&mut msg, 0, 0, 0) > 0 {
+                            windows_sys::Win32::UI::WindowsAndMessaging::TranslateMessage(&msg);
+                            windows_sys::Win32::UI::WindowsAndMessaging::DispatchMessageW(&msg);
+                        }
+                    }
+                });
+            }
+
+            Box::new(ui::FlowApp::new(cc, rt, is_listening_state, current_amplitude_ui, (), rx))
         }),
     )
 }

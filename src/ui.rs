@@ -2,52 +2,6 @@ use eframe::egui;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::runtime::Runtime;
-use tray_icon::{TrayIcon, TrayIconEvent};
-
-pub fn create_tray_icon_rgba() -> (Vec<u8>, u32, u32) {
-    let size: u32 = 32;
-    let mut rgba = vec![0u8; (size * size * 4) as usize];
-    let cx = size as f32 / 2.0;
-    let cy = size as f32 / 2.0;
-    let bg_radius = cx - 1.0;
-    let pi = std::f32::consts::PI;
-
-    for y in 0..size {
-        for x in 0..size {
-            let idx = ((y * size + x) * 4) as usize;
-            let dx = x as f32 - cx;
-            let dy = y as f32 - cy;
-            let dist = (dx * dx + dy * dy).sqrt();
-
-            // Rounded black background
-            if dist <= bg_radius {
-                rgba[idx] = 15;
-                rgba[idx + 1] = 15;
-                rgba[idx + 2] = 15;
-                rgba[idx + 3] = 255;
-
-                // Waveform: draw a sine wave across the icon horizontally
-                // Normalize x to 0..1 range within the circle
-                let nx = (x as f32 - 4.0) / (size as f32 - 8.0); // padding of 4px
-                if nx >= 0.0 && nx <= 1.0 {
-                    // Sine wave with varying amplitude (louder in the middle)
-                    let amplitude_envelope = (nx * pi).sin(); // envelope: peak at center
-                    let wave_y = cy + (nx * pi * 3.0).sin() * amplitude_envelope * 8.0;
-
-                    // Draw with thickness of ~2.5px
-                    let dist_to_wave = (y as f32 - wave_y).abs();
-                    if dist_to_wave < 1.8 {
-                        rgba[idx] = 255;
-                        rgba[idx + 1] = 255;
-                        rgba[idx + 2] = 255;
-                        rgba[idx + 3] = 255;
-                    }
-                }
-            }
-        }
-    }
-    (rgba, size, size)
-}
 
 pub struct FlowApp {
     #[allow(dead_code)]
@@ -55,8 +9,7 @@ pub struct FlowApp {
     #[allow(dead_code)]
     is_listening_state: Arc<AtomicBool>,
     current_amplitude: Arc<std::sync::atomic::AtomicU32>,
-    _tray_icon: Option<TrayIcon>,
-    tray_rx: std::sync::mpsc::Receiver<TrayIconEvent>,
+    _tray_icon: (),
     menu_open: bool,
     menu_pos: egui::Pos2,
     frames_since_menu_open: usize,
@@ -74,15 +27,14 @@ impl FlowApp {
         rt: Arc<Runtime>,
         is_listening_state: Arc<AtomicBool>,
         current_amplitude: Arc<std::sync::atomic::AtomicU32>,
-        tray_icon: Option<TrayIcon>,
-        tray_rx: std::sync::mpsc::Receiver<TrayIconEvent>,
+        _tray_icon: (),
+        _tray_rx: std::sync::mpsc::Receiver<()>,
     ) -> Self {
         Self {
             rt,
             is_listening_state,
             current_amplitude,
-            _tray_icon: tray_icon,
-            tray_rx,
+            _tray_icon: (),
             menu_open: false,
             menu_pos: egui::pos2(0.0, 0.0),
             frames_since_menu_open: 0,
@@ -107,53 +59,6 @@ impl eframe::App for FlowApp {
         if self.frames_since_menu_open == 0 && self.time == 0.0 {
             if let Ok(mut f) = std::fs::OpenOptions::new().append(true).create(true).open("flow.log") {
                 let _ = writeln!(f, "DEBUG: UI Update loop started.");
-            }
-        }
-        
-        let mut process_event = |event: tray_icon::TrayIconEvent| {
-            if let Ok(mut f) = std::fs::OpenOptions::new().append(true).create(true).open("flow.log") {
-                let _ = writeln!(f, "DEBUG: Received tray event: {:?}", event);
-            }
-            if let tray_icon::TrayIconEvent::Click { button, button_state, position, .. } = event {
-                if let Ok(mut f) = std::fs::OpenOptions::new().append(true).create(true).open("flow.log") {
-                    let _ = writeln!(f, "DEBUG: Parsed Click! button={:?}, state={:?}", button, button_state);
-                }
-                if button_state == tray_icon::MouseButtonState::Up {
-                    if button == tray_icon::MouseButton::Right || button == tray_icon::MouseButton::Left {
-                        self.menu_open = !self.menu_open;
-                        
-                        let dpi = ctx.pixels_per_point();
-                        let logical_x = position.x as f32 / dpi;
-                        let logical_y = position.y as f32 / dpi;
-                        
-                        self.menu_pos = egui::pos2(logical_x - 80.0, logical_y - 120.0);
-                        self.frames_since_menu_open = 0;
-                        if let Ok(mut f) = std::fs::OpenOptions::new().append(true).create(true).open("flow.log") {
-                            let _ = writeln!(f, "DEBUG: menu_open is now: {}, menu_pos: {:?}", self.menu_open, self.menu_pos);
-                        }
-                    }
-                }
-            }
-        };
-
-        while let Ok(event) = self.tray_rx.try_recv() {
-            process_event(event);
-        }
-        
-        // Also poll the global receiver in case set_event_handler was ignored
-        while let Ok(event) = tray_icon::TrayIconEvent::receiver().try_recv() {
-            if let Ok(mut f) = std::fs::OpenOptions::new().append(true).create(true).open("flow.log") {
-                let _ = writeln!(f, "DEBUG: Received from global receiver: {:?}", event);
-            }
-            process_event(event);
-        }
-
-        while let Ok(event) = tray_icon::menu::MenuEvent::receiver().try_recv() {
-            if let Ok(mut f) = std::fs::OpenOptions::new().append(true).create(true).open("flow.log") {
-                let _ = writeln!(f, "DEBUG: Received menu event: {:?}", event);
-            }
-            if event.id.0 == "Quit" {
-                std::process::exit(0);
             }
         }
 

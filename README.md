@@ -1,5 +1,10 @@
 # Flow 2.0 (Rust Edition) 🦀
 
+<div align="center">
+  <img src="assets/icon.png" width="128" alt="Flow AI Icon" />
+</div>
+
+
 This is the high-performance, native Rust version of **Flow**, an open-source voice dictation assistant inspired by the iPhone's Dynamic Island aesthetic. 
 
 ## Features
