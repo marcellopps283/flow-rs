@@ -35,7 +35,7 @@ impl FlowApp {
             time: 0.0,
             has_positioned: false,
             ui_width: 100.0,
-            ui_height: 4.0,
+            ui_height: 8.0,
         }
     }
 }
@@ -48,9 +48,10 @@ impl eframe::App for FlowApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Tray icon logic
         if self._tray_icon.is_some() {
-            if let Ok(event) = TrayIconEvent::receiver().try_recv() {
+            while let Ok(event) = TrayIconEvent::receiver().try_recv() {
                 if let tray_icon::TrayIconEvent::Click { button, button_state, position, .. } = event {
-                    if button == tray_icon::MouseButton::Right && button_state == tray_icon::MouseButtonState::Up {
+                    if (button == tray_icon::MouseButton::Right || button == tray_icon::MouseButton::Left) 
+                       && button_state == tray_icon::MouseButtonState::Down {
                         self.menu_open = !self.menu_open;
                         self.menu_pos = egui::pos2(position.x as f32, position.y as f32 - 130.0);
                     }
@@ -114,9 +115,9 @@ impl eframe::App for FlowApp {
         // Pill logic
         if !self.has_positioned {
             if let Some(monitor_size) = ctx.input(|i| i.viewport().monitor_size) {
-                let window_width = 180.0;
+                let window_width = 240.0;
                 let pos_x = (monitor_size.x - window_width) / 2.0;
-                let pos_y = 0.0; // Glue to the very top edge
+                let pos_y = 1.0; // Glue to the very top edge, offset by 1px to prevent Windows snapping issues
                 ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(pos_x, pos_y)));
                 self.has_positioned = true;
             }
@@ -143,8 +144,8 @@ impl eframe::App for FlowApp {
             self.stems[i] += (self.target_stems[i] - self.stems[i]) * dt * 15.0;
         }
 
-        let target_width = if self.is_listening_state.load(Ordering::Relaxed) { 180.0 } else { 100.0 };
-        let target_height = if self.is_listening_state.load(Ordering::Relaxed) { 40.0 } else { 4.0 };
+        let target_width = if self.is_listening_state.load(Ordering::Relaxed) { 240.0 } else { 140.0 };
+        let target_height = if self.is_listening_state.load(Ordering::Relaxed) { 50.0 } else { 8.0 };
         
         self.ui_width += (target_width - self.ui_width) * (dt * 15.0).min(1.0);
         self.ui_height += (target_height - self.ui_height) * (dt * 15.0).min(1.0);
@@ -185,9 +186,8 @@ impl eframe::App for FlowApp {
                 for i in 0..num_stems {
                     let amplitude = self.stems[i];
                     // Constrain stem height using the current dynamic ui_height
-                    let max_stem_h = rect.height() - 8.0;
-                    if max_stem_h > 0.0 {
-                        let stem_height = (amplitude * rect.height() * 0.8).clamp(2.0, max_stem_h);
+                    let max_stem_h = (rect.height() - 8.0).max(2.0);
+                    let stem_height = (amplitude * rect.height() * 0.8).clamp(2.0, max_stem_h);
                         
                         let t = i as f32 / num_stems as f32;
                         let color = if t < 0.33 {
@@ -208,29 +208,51 @@ impl eframe::App for FlowApp {
                             stem_width / 2.0,
                             color,
                         );
-                    }
+
                     x += stem_width + spacing;
                 }
             } else {
-                // Idle edge beam
+                // Organic neon sweep from left to right
                 let time_f = self.time as f32;
-                // Move back and forth
-                let beam_pos = (time_f * 2.5).sin(); // -1.0 to 1.0
-                let usable_width = rect.width() - 20.0;
-                let center_px = rect.center().x + beam_pos * (usable_width / 2.0);
+                let duration = 2.0;
+                let progress = (time_f % duration) / duration; // 0.0 to 1.0
                 
-                let beam_width = 15.0;
-                let beam_rect = egui::Rect::from_center_size(
-                    egui::pos2(center_px, rect.height() / 2.0),
-                    egui::vec2(beam_width, rect.height().max(2.0)),
-                );
+                let start_x = rect.left();
+                let end_x = rect.right();
+                
+                // Allow the head to travel slightly out of bounds so the tail fully leaves the screen
+                let travel_width = rect.width() + 80.0;
+                let head_x = (start_x - 40.0) + progress * travel_width;
 
-                // Draw a small colorful rectangle acting as the beam
-                ui.painter().rect_filled(
-                    beam_rect,
-                    rect.height() / 2.0,
-                    egui::Color32::from_rgb(100, 255, 255), // Cyan/neon beam
-                );
+                let trail_length = 60.0;
+                let segments = 30;
+                let seg_width = trail_length / segments as f32;
+
+                for j in 0..segments {
+                    let offset = j as f32 * seg_width;
+                    let seg_x = head_x - offset;
+
+                    // Only draw if inside the rect horizontally
+                    if seg_x >= start_x && seg_x <= end_x {
+                        // Fade out the tail and shrink height
+                        let scale = 1.0 - (j as f32 / segments as f32);
+                        let alpha = scale.powi(2); // Quadratic fade
+                        let color = egui::Color32::from_rgba_premultiplied(
+                            (0.0 * alpha) as u8,
+                            (255.0 * alpha) as u8,
+                            (200.0 * alpha) as u8,
+                            (255.0 * alpha) as u8,
+                        );
+
+                        let seg_height = rect.height() * scale;
+                        let seg_rect = egui::Rect::from_center_size(
+                            egui::pos2(seg_x + seg_width / 2.0, rect.center().y),
+                            egui::vec2(seg_width + 0.5, seg_height.max(1.0)),
+                        );
+
+                        ui.painter().rect_filled(seg_rect, seg_height / 2.0, color);
+                    }
+                }
             }
         });
         
