@@ -167,8 +167,21 @@ fn main() -> Result<(), eframe::Error> {
             }));
 
             let (icon_rgba, icon_w, icon_h) = ui::create_tray_icon_rgba();
+            
+            // Build the native tray menu
+            use tray_icon::menu::{Menu, MenuItem, PredefinedMenuItem};
+            let tray_menu = Menu::new();
+            let settings_i = MenuItem::new("Settings", true, None);
+            let quit_i = MenuItem::new("Quit", true, None);
+            let _ = tray_menu.append_items(&[
+                &settings_i,
+                &PredefinedMenuItem::separator(),
+                &quit_i,
+            ]);
+
             let tray_icon = match tray_icon::TrayIconBuilder::new()
                 .with_tooltip("Flow AI")
+                .with_menu(Box::new(tray_menu))
                 .with_icon(tray_icon::Icon::from_rgba(icon_rgba, icon_w, icon_h).expect("Failed to create icon"))
                 .build()
             {

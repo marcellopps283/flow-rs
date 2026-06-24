@@ -102,10 +102,22 @@ impl eframe::App for FlowApp {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Tray icon logic
-        while let Ok(event) = self.tray_rx.try_recv() {
-            println!("DEBUG: Received tray event: {:?}", event);
+        use std::io::Write;
+        // Startup log so we know the directory
+        if self.frames_since_menu_open == 0 && self.time == 0.0 {
+            if let Ok(mut f) = std::fs::OpenOptions::new().append(true).create(true).open("flow.log") {
+                let _ = writeln!(f, "DEBUG: UI Update loop started.");
+            }
+        }
+        
+        let mut process_event = |event: tray_icon::TrayIconEvent| {
+            if let Ok(mut f) = std::fs::OpenOptions::new().append(true).create(true).open("flow.log") {
+                let _ = writeln!(f, "DEBUG: Received tray event: {:?}", event);
+            }
             if let tray_icon::TrayIconEvent::Click { button, button_state, position, .. } = event {
+                if let Ok(mut f) = std::fs::OpenOptions::new().append(true).create(true).open("flow.log") {
+                    let _ = writeln!(f, "DEBUG: Parsed Click! button={:?}, state={:?}", button, button_state);
+                }
                 if button_state == tray_icon::MouseButtonState::Up {
                     if button == tray_icon::MouseButton::Right || button == tray_icon::MouseButton::Left {
                         self.menu_open = !self.menu_open;
@@ -116,65 +128,32 @@ impl eframe::App for FlowApp {
                         
                         self.menu_pos = egui::pos2(logical_x - 80.0, logical_y - 120.0);
                         self.frames_since_menu_open = 0;
-                        println!("DEBUG: menu_open is now: {}, menu_pos: {:?}", self.menu_open, self.menu_pos);
+                        if let Ok(mut f) = std::fs::OpenOptions::new().append(true).create(true).open("flow.log") {
+                            let _ = writeln!(f, "DEBUG: menu_open is now: {}, menu_pos: {:?}", self.menu_open, self.menu_pos);
+                        }
                     }
                 }
             }
+        };
+
+        while let Ok(event) = self.tray_rx.try_recv() {
+            process_event(event);
+        }
+        
+        // Also poll the global receiver in case set_event_handler was ignored
+        while let Ok(event) = tray_icon::TrayIconEvent::receiver().try_recv() {
+            if let Ok(mut f) = std::fs::OpenOptions::new().append(true).create(true).open("flow.log") {
+                let _ = writeln!(f, "DEBUG: Received from global receiver: {:?}", event);
+            }
+            process_event(event);
         }
 
-        if self.menu_open {
-            let viewport_id = egui::ViewportId::from_hash_of("shadcn_menu");
-            
-            let viewport_builder = egui::ViewportBuilder::default()
-                .with_title("Menu")
-                .with_inner_size([160.0, 110.0])
-                .with_position(self.menu_pos)
-                .with_decorations(false)
-                .with_transparent(true)
-                .with_always_on_top();
-
-            let mut should_close = false;
-
-            ctx.show_viewport_immediate(viewport_id, viewport_builder, |ctx, _class| {
-                let frame = egui::Frame::none()
-                    .fill(egui::Color32::from_rgba_premultiplied(15, 15, 15, 240))
-                    .rounding(8.0)
-                    .inner_margin(8.0)
-                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(40)));
-                
-                egui::CentralPanel::default().frame(frame).show(ctx, |ui| {
-                    ui.style_mut().visuals.widgets.inactive.bg_fill = egui::Color32::TRANSPARENT;
-                    ui.style_mut().visuals.widgets.hovered.bg_fill = egui::Color32::from_gray(40);
-                    ui.style_mut().visuals.widgets.hovered.rounding = egui::Rounding::same(6.0);
-                    ui.style_mut().visuals.widgets.active.bg_fill = egui::Color32::from_gray(60);
-                    ui.style_mut().visuals.widgets.active.rounding = egui::Rounding::same(6.0);
-                    
-                    ui.label(egui::RichText::new("Flow AI").strong().color(egui::Color32::WHITE).size(14.0));
-                    ui.add_space(4.0);
-                    ui.separator();
-                    ui.add_space(4.0);
-                    
-                    let btn_size = egui::vec2(ui.available_width(), 26.0);
-                    
-                    if ui.add_sized(btn_size, egui::Button::new(egui::RichText::new("Settings").color(egui::Color32::from_gray(200)))).clicked() {
-                        should_close = true;
-                    }
-                    ui.add_space(2.0);
-                    if ui.add_sized(btn_size, egui::Button::new(egui::RichText::new("Quit").color(egui::Color32::from_rgb(255, 100, 100)))).clicked() {
-                        std::process::exit(0);
-                    }
-                });
-
-                if self.frames_since_menu_open > 5 {
-                    if ctx.input(|i| i.pointer.any_pressed() && !ctx.is_pointer_over_area()) {
-                        should_close = true;
-                    }
-                }
-                self.frames_since_menu_open += 1;
-            });
-
-            if should_close {
-                self.menu_open = false;
+        while let Ok(event) = tray_icon::menu::MenuEvent::receiver().try_recv() {
+            if let Ok(mut f) = std::fs::OpenOptions::new().append(true).create(true).open("flow.log") {
+                let _ = writeln!(f, "DEBUG: Received menu event: {:?}", event);
+            }
+            if event.id.0 == "Quit" {
+                std::process::exit(0);
             }
         }
 
