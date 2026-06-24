@@ -34,10 +34,13 @@ fn main() -> Result<(), eframe::Error> {
 
     let (tx_app_event, mut rx_app_event) = tokio_mpsc::channel(100);
     // MUST keep _hotkey_manager alive on the main thread, or the hotkey gets unregistered!
-    let _hotkey_manager = automation::init_automation(tx_app_event);
+    let _hotkey_manager = automation::init_automation(tx_app_event.clone());
 
     let is_listening_state = Arc::new(AtomicBool::new(false));
     let is_listening_clone = is_listening_state.clone();
+    
+    let is_processing_state = Arc::new(AtomicBool::new(false));
+    let is_processing_clone = is_processing_state.clone();
 
     let current_amplitude = Arc::new(std::sync::atomic::AtomicU32::new(0.0f32.to_bits()));
     let current_amplitude_ui = current_amplitude.clone();
@@ -66,6 +69,8 @@ fn main() -> Result<(), eframe::Error> {
                         } else {
                             audio_recorder.stop_recording();
                             audio_rx = None;
+                            
+                            is_processing_clone.store(true, Ordering::Relaxed);
                             
                             // Transcription and Polishing Pipeline
                             let sample_rate = audio_recorder.sample_rate;
@@ -117,6 +122,8 @@ fn main() -> Result<(), eframe::Error> {
                                 }
                                 Err(e) => println!("Transcription error: {}", e),
                             }
+                            
+                            is_processing_clone.store(false, Ordering::Relaxed);
                         }
                     }
                     _ => {}
@@ -158,7 +165,7 @@ fn main() -> Result<(), eframe::Error> {
     eframe::run_native(
         "Flow 2.0",
         options,
-        Box::new(|cc| {
+        Box::new(move |cc| {
             let (tx, rx) = std_mpsc::channel();
             
             #[cfg(target_os = "windows")]
@@ -189,7 +196,8 @@ fn main() -> Result<(), eframe::Error> {
                 });
             }
 
-            Box::new(ui::FlowApp::new(cc, rt, is_listening_state, current_amplitude_ui, (), rx))
+            let tx_app_event_ui = tx_app_event.clone();
+            Box::new(ui::FlowApp::new(cc, rt, is_listening_state, is_processing_state, current_amplitude_ui, (), rx, tx_app_event_ui))
         }),
     )
 }
