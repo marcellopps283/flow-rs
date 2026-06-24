@@ -105,17 +105,19 @@ impl eframe::App for FlowApp {
         // Tray icon logic
         while let Ok(event) = self.tray_rx.try_recv() {
             println!("DEBUG: Received tray event: {:?}", event);
-            if let tray_icon::TrayIconEvent::Click { button, position, .. } = event {
-                if button == tray_icon::MouseButton::Right || button == tray_icon::MouseButton::Left {
-                    self.menu_open = !self.menu_open;
-                    
-                    let dpi = ctx.pixels_per_point();
-                    let logical_x = position.x as f32 / dpi;
-                    let logical_y = position.y as f32 / dpi;
-                    
-                    self.menu_pos = egui::pos2(logical_x - 80.0, logical_y - 120.0);
-                    self.frames_since_menu_open = 0;
-                    println!("DEBUG: menu_open is now: {}, menu_pos: {:?}", self.menu_open, self.menu_pos);
+            if let tray_icon::TrayIconEvent::Click { button, button_state, position, .. } = event {
+                if button_state == tray_icon::MouseButtonState::Up {
+                    if button == tray_icon::MouseButton::Right || button == tray_icon::MouseButton::Left {
+                        self.menu_open = !self.menu_open;
+                        
+                        let dpi = ctx.pixels_per_point();
+                        let logical_x = position.x as f32 / dpi;
+                        let logical_y = position.y as f32 / dpi;
+                        
+                        self.menu_pos = egui::pos2(logical_x - 80.0, logical_y - 120.0);
+                        self.frames_since_menu_open = 0;
+                        println!("DEBUG: menu_open is now: {}, menu_pos: {:?}", self.menu_open, self.menu_pos);
+                    }
                 }
             }
         }
@@ -208,8 +210,8 @@ impl eframe::App for FlowApp {
             self.stems[i] += (self.target_stems[i] - self.stems[i]) * dt * 15.0;
         }
 
-        let target_width = if self.is_listening_state.load(Ordering::Relaxed) { 280.0 } else { 180.0 };
-        let target_height = if self.is_listening_state.load(Ordering::Relaxed) { 60.0 } else { 12.0 };
+        let target_width = if self.is_listening_state.load(Ordering::Relaxed) { 320.0 } else { 240.0 };
+        let target_height = if self.is_listening_state.load(Ordering::Relaxed) { 70.0 } else { 16.0 };
         
         self.ui_width += (target_width - self.ui_width) * (dt * 15.0).min(1.0);
         self.ui_height += (target_height - self.ui_height) * (dt * 15.0).min(1.0);
@@ -317,9 +319,9 @@ impl eframe::App for FlowApp {
                     return egui::pos2(rect.right(), (rect.bottom() - r - d).max(rect.top()));
                 };
 
-                let tail_length = 120.0;
+                let tail_length = 150.0;
                 let head_d = (total_l + tail_length) * progress;
-                let segments = 45;
+                let segments = 60;
                 let seg_len = tail_length / segments as f32;
 
                 for j in 0..segments {
@@ -332,15 +334,26 @@ impl eframe::App for FlowApp {
                         
                         let scale = 1.0 - (j as f32 / segments as f32);
                         let alpha = scale.powi(2); // Non-linear fade looks organic
-                        let color = egui::Color32::from_rgba_premultiplied(
-                            (0.0 * alpha) as u8,
+                        
+                        // Outer glow
+                        let glow_color = egui::Color32::from_rgba_premultiplied(
+                            (0.0 * alpha * 0.4) as u8,
+                            (255.0 * alpha * 0.4) as u8,
+                            (255.0 * alpha * 0.4) as u8,
+                            (255.0 * alpha * 0.4) as u8,
+                        );
+                        let glow_thickness = 6.0 * scale.max(0.1);
+                        ui.painter().line_segment([p1, p2], egui::Stroke::new(glow_thickness, glow_color));
+
+                        // Inner core
+                        let core_color = egui::Color32::from_rgba_premultiplied(
+                            (180.0 * alpha) as u8,
                             (255.0 * alpha) as u8,
                             (255.0 * alpha) as u8,
                             (255.0 * alpha) as u8,
                         );
-                        
-                        let thickness = 3.0 * scale.max(0.1); // Tip is thick, tail is thin
-                        ui.painter().line_segment([p1, p2], egui::Stroke::new(thickness, color));
+                        let core_thickness = 2.0 * scale.max(0.1);
+                        ui.painter().line_segment([p1, p2], egui::Stroke::new(core_thickness, core_color));
                     }
                 }
             }
