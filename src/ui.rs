@@ -4,6 +4,51 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::runtime::Runtime;
 use tray_icon::{TrayIcon, TrayIconEvent};
 
+pub fn create_tray_icon_rgba() -> (Vec<u8>, u32, u32) {
+    let size: u32 = 32;
+    let mut rgba = vec![0u8; (size * size * 4) as usize];
+    let cx = size as f32 / 2.0;
+    let cy = size as f32 / 2.0;
+    let bg_radius = cx - 1.0;
+    let pi = std::f32::consts::PI;
+
+    for y in 0..size {
+        for x in 0..size {
+            let idx = ((y * size + x) * 4) as usize;
+            let dx = x as f32 - cx;
+            let dy = y as f32 - cy;
+            let dist = (dx * dx + dy * dy).sqrt();
+
+            // Rounded black background
+            if dist <= bg_radius {
+                rgba[idx] = 15;
+                rgba[idx + 1] = 15;
+                rgba[idx + 2] = 15;
+                rgba[idx + 3] = 255;
+
+                // Waveform: draw a sine wave across the icon horizontally
+                // Normalize x to 0..1 range within the circle
+                let nx = (x as f32 - 4.0) / (size as f32 - 8.0); // padding of 4px
+                if nx >= 0.0 && nx <= 1.0 {
+                    // Sine wave with varying amplitude (louder in the middle)
+                    let amplitude_envelope = (nx * pi).sin(); // envelope: peak at center
+                    let wave_y = cy + (nx * pi * 3.0).sin() * amplitude_envelope * 8.0;
+
+                    // Draw with thickness of ~2.5px
+                    let dist_to_wave = (y as f32 - wave_y).abs();
+                    if dist_to_wave < 1.8 {
+                        rgba[idx] = 255;
+                        rgba[idx + 1] = 255;
+                        rgba[idx + 2] = 255;
+                        rgba[idx + 3] = 255;
+                    }
+                }
+            }
+        }
+    }
+    (rgba, size, size)
+}
+
 pub struct FlowApp {
     #[allow(dead_code)]
     rt: Arc<Runtime>,
@@ -11,6 +56,7 @@ pub struct FlowApp {
     is_listening_state: Arc<AtomicBool>,
     current_amplitude: Arc<std::sync::atomic::AtomicU32>,
     _tray_icon: Option<TrayIcon>,
+    tray_rx: std::sync::mpsc::Receiver<TrayIconEvent>,
     menu_open: bool,
     menu_pos: egui::Pos2,
     frames_since_menu_open: usize,
@@ -23,12 +69,20 @@ pub struct FlowApp {
 }
 
 impl FlowApp {
-    pub fn new(_cc: &eframe::CreationContext<'_>, rt: Arc<Runtime>, is_listening_state: Arc<AtomicBool>, current_amplitude: Arc<std::sync::atomic::AtomicU32>, tray_icon: Option<TrayIcon>) -> Self {
+    pub fn new(
+        _cc: &eframe::CreationContext<'_>,
+        rt: Arc<Runtime>,
+        is_listening_state: Arc<AtomicBool>,
+        current_amplitude: Arc<std::sync::atomic::AtomicU32>,
+        tray_icon: Option<TrayIcon>,
+        tray_rx: std::sync::mpsc::Receiver<TrayIconEvent>,
+    ) -> Self {
         Self {
             rt,
             is_listening_state,
             current_amplitude,
             _tray_icon: tray_icon,
+            tray_rx,
             menu_open: false,
             menu_pos: egui::pos2(0.0, 0.0),
             frames_since_menu_open: 0,
@@ -49,20 +103,24 @@ impl eframe::App for FlowApp {
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Tray icon logic
-        if self._tray_icon.is_some() {
-            while let Ok(event) = TrayIconEvent::receiver().try_recv() {
-                if let tray_icon::TrayIconEvent::Click { button, button_state, position, .. } = event {
-                    if (button == tray_icon::MouseButton::Right || button == tray_icon::MouseButton::Left) 
-                       && button_state == tray_icon::MouseButtonState::Down {
-                        self.menu_open = !self.menu_open;
-                        self.menu_pos = egui::pos2(position.x as f32, position.y as f32 - 130.0);
-                        self.frames_since_menu_open = 0;
-                    }
+        while let Ok(event) = self.tray_rx.try_recv() {
+            println!("DEBUG: Received tray event: {:?}", event);
+            if let tray_icon::TrayIconEvent::Click { button, position, .. } = event {
+                if button == tray_icon::MouseButton::Right || button == tray_icon::MouseButton::Left {
+                    self.menu_open = !self.menu_open;
+                    
+                    let dpi = ctx.pixels_per_point();
+                    let logical_x = position.x as f32 / dpi;
+                    let logical_y = position.y as f32 / dpi;
+                    
+                    self.menu_pos = egui::pos2(logical_x - 80.0, logical_y - 120.0);
+                    self.frames_since_menu_open = 0;
+                    println!("DEBUG: menu_open is now: {}, menu_pos: {:?}", self.menu_open, self.menu_pos);
                 }
             }
         }
 
-        if self._tray_icon.is_some() && self.menu_open {
+        if self.menu_open {
             let viewport_id = egui::ViewportId::from_hash_of("shadcn_menu");
             
             let viewport_builder = egui::ViewportBuilder::default()

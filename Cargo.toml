@@ -7,6 +7,7 @@ edition = "2024"
 name = "flow_v2"
 path = "src/main.rs"
 
+
 [dependencies]
 eframe = "0.27"
 egui = "0.27"
@@ -25,4 +26,10 @@ tray-icon = "0.19"
 image = "0.25"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.52", features = ["Win32_System_Com"] }
+windows-sys = { version = "0.52", features = [
+    "Win32_System_Com",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi"
+] }

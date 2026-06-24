@@ -11,54 +11,23 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc as tokio_mpsc;
 use std::sync::mpsc as std_mpsc;
-use tray_icon::TrayIconBuilder;
 
-fn create_tray_icon_rgba() -> (Vec<u8>, u32, u32) {
-    let size: u32 = 32;
-    let mut rgba = vec![0u8; (size * size * 4) as usize];
-    let cx = size as f32 / 2.0;
-    let cy = size as f32 / 2.0;
-    let bg_radius = cx - 1.0;
-    let pi = std::f32::consts::PI;
 
-    for y in 0..size {
-        for x in 0..size {
-            let idx = ((y * size + x) * 4) as usize;
-            let dx = x as f32 - cx;
-            let dy = y as f32 - cy;
-            let dist = (dx * dx + dy * dy).sqrt();
-
-            // Rounded black background
-            if dist <= bg_radius {
-                rgba[idx] = 15;
-                rgba[idx + 1] = 15;
-                rgba[idx + 2] = 15;
-                rgba[idx + 3] = 255;
-
-                // Waveform: draw a sine wave across the icon horizontally
-                // Normalize x to 0..1 range within the circle
-                let nx = (x as f32 - 4.0) / (size as f32 - 8.0); // padding of 4px
-                if nx >= 0.0 && nx <= 1.0 {
-                    // Sine wave with varying amplitude (louder in the middle)
-                    let amplitude_envelope = (nx * pi).sin(); // envelope: peak at center
-                    let wave_y = cy + (nx * pi * 3.0).sin() * amplitude_envelope * 8.0;
-
-                    // Draw with thickness of ~2.5px
-                    let dist_to_wave = (y as f32 - wave_y).abs();
-                    if dist_to_wave < 1.8 {
-                        rgba[idx] = 255;
-                        rgba[idx + 1] = 255;
-                        rgba[idx + 2] = 255;
-                        rgba[idx + 3] = 255;
-                    }
-                }
-            }
-        }
+#[cfg(target_os = "windows")]
+fn init_com() {
+    unsafe {
+        let hr = windows_sys::Win32::System::Com::CoInitializeEx(
+            std::ptr::null(),
+            windows_sys::Win32::System::Com::COINIT_APARTMENTTHREADED as u32,
+        );
+        println!("DEBUG: CoInitializeEx returned: {:#X}", hr);
     }
-    (rgba, size, size)
 }
 
 fn main() -> Result<(), eframe::Error> {
+    #[cfg(target_os = "windows")]
+    init_com();
+
     dotenvy::dotenv().ok();
 
     let rt = Arc::new(Runtime::new().expect("Failed to create Tokio runtime"));
@@ -190,16 +159,21 @@ fn main() -> Result<(), eframe::Error> {
         "Flow 2.0",
         options,
         Box::new(|cc| {
-            // Build tray icon inside the event loop closure where event loop is active
-            let (icon_rgba, icon_w, icon_h) = create_tray_icon_rgba();
+            let (tx, rx) = std_mpsc::channel();
+            let ctx = cc.egui_ctx.clone();
+            tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
+                let _ = tx.send(event);
+                ctx.request_repaint();
+            }));
 
-            let tray_icon = match TrayIconBuilder::new()
+            let (icon_rgba, icon_w, icon_h) = ui::create_tray_icon_rgba();
+            let tray_icon = match tray_icon::TrayIconBuilder::new()
                 .with_tooltip("Flow AI")
                 .with_icon(tray_icon::Icon::from_rgba(icon_rgba, icon_w, icon_h).expect("Failed to create icon"))
                 .build()
             {
                 Ok(icon) => {
-                    println!("Tray icon created successfully inside run_native!");
+                    println!("DEBUG: Tray icon created successfully inside run_native!");
                     Some(icon)
                 }
                 Err(e) => {
@@ -207,7 +181,8 @@ fn main() -> Result<(), eframe::Error> {
                     None
                 }
             };
-            Box::new(ui::FlowApp::new(cc, rt, is_listening_state, current_amplitude_ui, tray_icon))
+
+            Box::new(ui::FlowApp::new(cc, rt, is_listening_state, current_amplitude_ui, tray_icon, rx))
         }),
     )
 }
