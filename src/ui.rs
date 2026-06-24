@@ -2,7 +2,8 @@ use eframe::egui;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::runtime::Runtime;
-use tray_icon::{TrayIcon, TrayIconEvent};
+use tray_icon::TrayIcon;
+use tray_icon::menu::{MenuEvent, MenuId, Menu, MenuItem};
 
 pub struct FlowApp {
     #[allow(dead_code)]
@@ -11,8 +12,9 @@ pub struct FlowApp {
     is_listening_state: Arc<AtomicBool>,
     current_amplitude: Arc<std::sync::atomic::AtomicU32>,
     _tray_icon: Option<TrayIcon>,
-    menu_open: bool,
-    menu_pos: egui::Pos2,
+    quit_id: MenuId,
+    _tray_menu: Menu,
+    _quit_item: MenuItem,
     stems: Vec<f32>,
     target_stems: Vec<f32>,
     time: f64,
@@ -22,14 +24,15 @@ pub struct FlowApp {
 }
 
 impl FlowApp {
-    pub fn new(_cc: &eframe::CreationContext<'_>, rt: Arc<Runtime>, is_listening_state: Arc<AtomicBool>, current_amplitude: Arc<std::sync::atomic::AtomicU32>, tray_icon: Option<TrayIcon>) -> Self {
+    pub fn new(_cc: &eframe::CreationContext<'_>, rt: Arc<Runtime>, is_listening_state: Arc<AtomicBool>, current_amplitude: Arc<std::sync::atomic::AtomicU32>, tray_icon: Option<TrayIcon>, quit_id: MenuId, tray_menu: Menu, quit_i: MenuItem) -> Self {
         Self {
             rt,
             is_listening_state,
             current_amplitude,
             _tray_icon: tray_icon,
-            menu_open: false,
-            menu_pos: egui::pos2(0.0, 0.0),
+            quit_id,
+            _tray_menu: tray_menu,
+            _quit_item: quit_i,
             stems: vec![0.0; 15],
             target_stems: vec![0.0; 15],
             time: 0.0,
@@ -46,69 +49,10 @@ impl eframe::App for FlowApp {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Tray icon logic
-        if self._tray_icon.is_some() {
-            while let Ok(event) = TrayIconEvent::receiver().try_recv() {
-                if let tray_icon::TrayIconEvent::Click { button, button_state, position, .. } = event {
-                    if (button == tray_icon::MouseButton::Right || button == tray_icon::MouseButton::Left) 
-                       && button_state == tray_icon::MouseButtonState::Down {
-                        self.menu_open = !self.menu_open;
-                        self.menu_pos = egui::pos2(position.x as f32, position.y as f32 - 130.0);
-                    }
-                }
-            }
-        }
-
-        if self._tray_icon.is_some() && self.menu_open {
-            let viewport_id = egui::ViewportId::from_hash_of("shadcn_menu");
-            
-            let viewport_builder = egui::ViewportBuilder::default()
-                .with_title("Menu")
-                .with_inner_size([160.0, 110.0])
-                .with_position(self.menu_pos)
-                .with_decorations(false)
-                .with_transparent(true)
-                .with_always_on_top();
-
-            let mut should_close = false;
-
-            ctx.show_viewport_immediate(viewport_id, viewport_builder, |ctx, _class| {
-                let frame = egui::Frame::none()
-                    .fill(egui::Color32::from_rgba_premultiplied(15, 15, 15, 240))
-                    .rounding(8.0)
-                    .inner_margin(8.0)
-                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(40)));
-                
-                egui::CentralPanel::default().frame(frame).show(ctx, |ui| {
-                    ui.style_mut().visuals.widgets.inactive.bg_fill = egui::Color32::TRANSPARENT;
-                    ui.style_mut().visuals.widgets.hovered.bg_fill = egui::Color32::from_gray(40);
-                    ui.style_mut().visuals.widgets.hovered.rounding = egui::Rounding::same(6.0);
-                    ui.style_mut().visuals.widgets.active.bg_fill = egui::Color32::from_gray(60);
-                    ui.style_mut().visuals.widgets.active.rounding = egui::Rounding::same(6.0);
-                    
-                    ui.label(egui::RichText::new("Flow AI").strong().color(egui::Color32::WHITE).size(14.0));
-                    ui.add_space(4.0);
-                    ui.separator();
-                    ui.add_space(4.0);
-                    
-                    let btn_size = egui::vec2(ui.available_width(), 26.0);
-                    
-                    if ui.add_sized(btn_size, egui::Button::new(egui::RichText::new("Settings").color(egui::Color32::from_gray(200)))).clicked() {
-                        should_close = true;
-                    }
-                    ui.add_space(2.0);
-                    if ui.add_sized(btn_size, egui::Button::new(egui::RichText::new("Quit").color(egui::Color32::from_rgb(255, 100, 100)))).clicked() {
-                        std::process::exit(0);
-                    }
-                });
-
-                if ctx.input(|i| i.pointer.any_click() && !ctx.is_pointer_over_area()) {
-                    should_close = true;
-                }
-            });
-
-            if should_close {
-                self.menu_open = false;
+        // Tray Menu logic
+        if let Ok(event) = MenuEvent::receiver().try_recv() {
+            if event.id == self.quit_id {
+                std::process::exit(0);
             }
         }
 

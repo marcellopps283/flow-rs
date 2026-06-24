@@ -12,6 +12,7 @@ use tokio::runtime::Runtime;
 use tokio::sync::mpsc as tokio_mpsc;
 use std::sync::mpsc as std_mpsc;
 use tray_icon::TrayIconBuilder;
+use tray_icon::menu::{Menu, MenuItem};
 
 fn create_tray_icon_rgba() -> (Vec<u8>, u32, u32) {
     let size: u32 = 32;
@@ -192,8 +193,15 @@ fn main() -> Result<(), eframe::Error> {
         Box::new(|cc| {
             // Build tray icon inside the event loop closure where event loop is active
             let (icon_rgba, icon_w, icon_h) = create_tray_icon_rgba();
+            
+            let tray_menu = Menu::new();
+            let quit_i = MenuItem::new("Quit", true, None);
+            let _ = tray_menu.append(&quit_i);
+            let quit_id = quit_i.id().clone();
+
             let tray_icon = match TrayIconBuilder::new()
                 .with_tooltip("Flow AI")
+                .with_menu(Box::new(tray_menu.clone()))
                 .with_icon(tray_icon::Icon::from_rgba(icon_rgba, icon_w, icon_h).expect("Failed to create icon"))
                 .build()
             {
@@ -206,7 +214,7 @@ fn main() -> Result<(), eframe::Error> {
                     None
                 }
             };
-            Box::new(ui::FlowApp::new(cc, rt, is_listening_state, current_amplitude_ui, tray_icon))
+            Box::new(ui::FlowApp::new(cc, rt, is_listening_state, current_amplitude_ui, tray_icon, quit_id, tray_menu, quit_i))
         }),
     )
 }
